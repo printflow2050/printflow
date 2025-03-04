@@ -10,6 +10,7 @@ import ShopDashboard from './pages/ShopDashboard';
 import UploadPage from './pages/UploadPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import ForgotPassword from './pages/ForgotPassword';
 
 // Layout
 import DashboardLayout from './components/layouts/DashboardLayout';
@@ -24,6 +25,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/upload" element={<UploadPage />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         
         {/* Protected routes */}
         <Route path="/dashboard" element={<DashboardLayout />}>

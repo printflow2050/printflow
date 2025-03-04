@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, FileText, Check, Trash2, QrCode, Clock, AlertCircle, X } from 'lucide-react';
+import { Printer, FileText, Check, Trash2, QrCode, Clock, AlertCircle, X, Search } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { getToken, getShopId } from '../utils/auth';
+import { generateShopQRCodePDF } from '../utils/pdfGenerator';
 import { io, Socket } from 'socket.io-client';
 
 // Types
@@ -16,26 +17,24 @@ interface PrintJob {
   token: string;
   status: 'pending' | 'completed' | 'expired';
   uploadTime: Date;
+  file_path: string; // Ensure file_path is included
   fileName?: string;
   fileSize?: number;
 }
 
+// Updated QR Code Modal Component
 // QR Code Modal Component
 const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () => void; shop: any }) => {
-  const qrCanvasRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (shop && qrCanvasRef.current) {
-      qrCanvasRef.current.innerHTML = "";
-      const img = new Image();
-      img.src = shop.qr_code;
-      img.style.width = '300px';
-      img.style.height = '300px';
-      qrCanvasRef.current.appendChild(img);
-    }
-  }, [isOpen, shop]);
-
   if (!isOpen) return null;
+
+  const handleDownloadQRCode = async () => {
+    try {
+      await generateShopQRCodePDF(shop);
+      toast.success('QR Code PDF downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download QR Code PDF');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -48,7 +47,13 @@ const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () =
           </button>
         </div>
         <div className="flex flex-col items-center">
-          <div ref={qrCanvasRef} className="bg-white p-4 rounded-lg border border-gray-200"></div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <QRCode
+              value={`https://xeroxflow.com/upload?shop_id=${shop._id}`}
+              size={200}
+              level="H"
+            />
+          </div>
           <p className="mt-4 text-sm text-gray-500 text-center">
             Display this QR code in your shop for customers to scan and upload their files.
           </p>
@@ -58,15 +63,9 @@ const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () =
           </div>
           <button
             className="mt-6 inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
-            onClick={() => {
-              const link = document.createElement('a');
-              link.href = shop.qr_code;
-              link.download = `${shop.name}_QRCode.png`;
-              link.click();
-              toast.success('QR Code downloaded successfully');
-            }}
+            onClick={handleDownloadQRCode}
           >
-            Download QR Code
+            Download QR Code PDF
           </button>
         </div>
       </div>
@@ -80,6 +79,8 @@ const ShopDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [showQRModal, setShowQRModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const socketRef = useRef<Socket | null>(null);
 
   // Initialize WebSocket connection
@@ -187,28 +188,37 @@ const ShopDashboard = () => {
         },
         body: JSON.stringify({ status: 'completed' }),
       });
+
       if (!response.ok) {
         throw new Error('Failed to update print job status');
       }
+
       const updatedJob = await response.json();
+
+      // Update the local state with the updated job
       setPrintJobs(prevJobs =>
         prevJobs.map(job =>
-          job.id === jobId ? {
-            id: updatedJob._id,
-            fileType: updatedJob.fileName ? updatedJob.fileName.split('.').pop() : 'unknown',
-            printType: updatedJob.print_type,
-            printSide: updatedJob.print_side,
-            copies: updatedJob.copies,
-            token: updatedJob.token_number,
-            status: updatedJob.status,
-            uploadTime: new Date(updatedJob.uploaded_at),
-            fileName: updatedJob.fileName,
-            fileSize: updatedJob.fileSize
-          } : job
-        )
-      );
+          job._id === jobId ? updatedJob : job,
+          setPrintJobs(prevJobs =>
+            prevJobs.map(job =>
+              job.id === jobId ? {
+                id: updatedJob._id,
+                fileType: updatedJob.fileName ? updatedJob.fileName.split('.').pop() : 'unknown',
+                printType: updatedJob.print_type,
+                printSide: updatedJob.print_side,
+                copies: updatedJob.copies,
+                token: updatedJob.token_number,
+                status: updatedJob.status,
+                uploadTime: new Date(updatedJob.uploaded_at),
+                fileName: updatedJob.fileName,
+                fileSize: updatedJob.fileSize
+              } : job
+            )
+          )));
+
       toast.success('Print job marked as completed');
     } catch (error) {
+      console.error('Error updating job:', error);
       toast.error('Failed to update print job status');
     }
   };
@@ -221,22 +231,30 @@ const ShopDashboard = () => {
           'Authorization': `Bearer ${getToken()}`,
         },
       });
+
       if (!response.ok) {
         throw new Error('Failed to delete print job');
       }
-      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
-      toast.success('Print job deleted');
+
+      // Remove the deleted job from local state
+      setPrintJobs(prevJobs => prevJobs.filter(job => job._id !== jobId));
+      toast.success('Print job deleted successfully');
     } catch (error) {
+      console.error('Error deleting job:', error);
       toast.error('Failed to delete print job');
     }
   };
 
   const filteredJobs = printJobs.filter(job => job.status === activeTab);
 
+  const filteredAndSearchedJobs = filteredJobs.filter(job =>
+    job.token_number?.toString().toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const getUploadTimeDisplay = (date: Date) => {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 60) {
       return `${diffInMinutes} minutes ago`;
     } else if (diffInMinutes < 24 * 60) {
@@ -277,6 +295,41 @@ const ShopDashboard = () => {
       default:
         return null;
     }
+  };
+
+  const handleDownloadFile = async (filePath: string, fileName: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/${filePath}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`, // If authentication is required
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url); // Clean up the URL object
+      toast.success('File downloaded successfully');
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast.error(`Failed to download file: ${error.message}`);
+    }
+  };
+
+  // Add this helper function at the top of your component
+  const formatFileName = (filePath: string) => {
+    const fileName = filePath.split(/[/\\]/).pop() || '';
+    return fileName.replace(/^\d+-/, '');
   };
 
   return (
@@ -355,6 +408,21 @@ const ShopDashboard = () => {
             </div>
           </div>
 
+          <div className="mb-6">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by token number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              />
+            </div>
+          </div>
+
           {/* Updated Tabs */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 mb-6">
             <div className="border-b border-gray-200">
@@ -363,16 +431,14 @@ const ShopDashboard = () => {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab as 'pending' | 'completed' | 'expired')}
-                    className={`${
-                      activeTab === tab
+                    className={`${activeTab === tab
                         ? 'border-indigo-500 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
                   >
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs ${
-                      activeTab === tab ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs ${activeTab === tab ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                      }`}>
                       {printJobs.filter(job => job.status === tab).length}
                     </span>
                   </button>
@@ -386,74 +452,91 @@ const ShopDashboard = () => {
                 <div className="flex justify-center items-center h-64">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
                 </div>
-              ) : filteredJobs.length === 0 ? (
+              ) : filteredAndSearchedJobs.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-gray-100">
-                    <Printer className="h-6 w-6 text-gray-400" />
+                    <Search className="h-6 w-6 text-gray-400" />
                   </div>
-                  <h3 className="mt-3 text-sm font-medium text-gray-900">No {activeTab} print jobs</h3>
+                  <h3 className="mt-3 text-sm font-medium text-gray-900">
+                    {searchQuery ? "No jobs found with that token number" : `No ${activeTab} print jobs`}
+                  </h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    {activeTab === 'pending'
-                      ? "You don't have any pending print jobs at the moment."
-                      : activeTab === 'completed'
-                      ? "You haven't completed any print jobs yet."
-                      : "You don't have any expired print jobs."}
+                    {searchQuery
+                      ? "Try searching with a different token number"
+                      : activeTab === 'pending'
+                        ? "You don't have any pending print jobs at the moment."
+                        : activeTab === 'completed'
+                          ? "You haven't completed any print jobs yet."
+                          : "You don't have any expired print jobs."}
                   </p>
                 </div>
               ) : (
                 <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                  <ul className="divide-y divide-gray-200">
-                    {filteredJobs.map((job) => (
-                      <li key={job.id}>
-                        <div className="px-4 py-4 sm:px-6">
+                  <ul className="divide-y divide-gray-200 space-y-2">
+                    {filteredAndSearchedJobs.map((job) => (
+                      <li key={job.id} className="bg-white hover:bg-gray-50 transition-colors duration-150">
+                        <div className="px-6 py-5">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0">
-                                {getFileIcon(job.fileType)}
-                              </div>
+                            <div className="flex items-center max-w-2xl">
+                              <div className="flex-shrink-0">{getFileIcon(job.fileType)}</div>
                               <div className="ml-4">
                                 <div className="flex items-center">
                                   <h4 className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                                    {formatFileName(job.file_path)}
                                     {job.fileName || 'Unknown File'}
                                   </h4>
-                                  <span className="ml-2 flex-shrink-0">
-                                    {getStatusBadge(job.status)}
+                                  <span className="ml-2 flex-shrink-0">{getStatusBadge(job.status)}</span>
+                                </div>
+                                <div className="mt-2 flex items-center space-x-2">
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${job.printType === 'bw' ? 'bg-gray-100 text-gray-800' : 'bg-blue-50 text-blue-700'
+                                      }`}
+                                  >
+                                    {job.printType === 'bw' ? 'Black & White' : 'Color'}
+                                  </span>
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700">
+                                    {job.printSide === 'single' ? 'Single-sided' : 'Double-sided'}
+                                  </span>
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700">
+                                    {job.copies} {job.copies === 1 ? 'copy' : 'copies'}
                                   </span>
                                 </div>
                                 <div className="mt-1 flex items-center text-sm text-gray-500">
                                   <span className="truncate">
-                                    {(job.fileSize ? (job.fileSize / (1024 * 1024)).toFixed(1) : 'N/A')} MB • 
-                                    {job.printType === 'bw' ? ' Black & White' : ' Color'} • 
-                                    {job.printSide === 'single' ? ' Single-sided' : ' Double-sided'} • 
-                                    {job.copies} {job.copies === 1 ? 'copy' : 'copies'}
+                                    {(job.fileSize ? (job.fileSize / (1024 * 1024)).toFixed(1) : 'N/A')} MB
                                   </span>
                                 </div>
                               </div>
                             </div>
                             <div className="flex flex-col items-end">
                               <div className="text-sm font-medium text-gray-900 mb-1">
-                                Token: <span className="text-primary">{job.token}</span>
+                                Token: <span className="text-indigo-600 font-bold">{job.token}</span>
                               </div>
-                              <div className="text-xs text-gray-500">
-                                {getUploadTimeDisplay(job.uploadTime)}
-                              </div>
+                              <div className="text-xs text-gray-500">{getUploadTimeDisplay(job.uploadTime)}</div>
                             </div>
                           </div>
                           {job.status === 'pending' && (
                             <div className="mt-4 flex justify-end space-x-3">
                               <button
                                 onClick={() => handleMarkAsCompleted(job.id)}
-                                className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-xs font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
                               >
-                                <Check className="h-3 w-3 mr-1" />
+                                <Check className="h-3.5 w-3.5 mr-1" />
                                 Mark as Completed
                               </button>
                               <button
                                 onClick={() => handleDeleteJob(job.id)}
-                                className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                               >
-                                <Trash2 className="h-3 w-3 mr-1" />
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
                                 Delete
+                              </button>
+                              <button
+                                onClick={() => handleDownloadFile(job.file_path, formatFileName(job.file_path))}
+                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" />
+                                Download
                               </button>
                             </div>
                           )}

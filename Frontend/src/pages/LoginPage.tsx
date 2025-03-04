@@ -8,12 +8,20 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    rememberMe: false
   });
   const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      rememberMe: e.target.checked
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -141,6 +149,8 @@ const LoginPage = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
+                  checked={formData.rememberMe}
+                  onChange={handleCheckboxChange}
                   className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded transition duration-200"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
@@ -149,9 +159,12 @@ const LoginPage = () => {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500 transition duration-200">
+                <Link
+                  to="/forgot-password"
+                  className="font-medium text-indigo-600 hover:text-indigo-500 transition duration-200"
+                >
                   Forgot your password?
-                </a>
+                </Link>
               </div>
             </div>
 
