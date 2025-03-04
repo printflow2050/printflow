@@ -10,7 +10,9 @@ const shopSchema = new mongoose.Schema({
     qr_code: { type: String, default:null },
     bw_cost_per_page: { type: Number, required: true },
     color_cost_per_page: { type: Number, required: true },
-    created_at: { type: Date, default: Date.now }
+    created_at: { type: Date, default: Date.now },
+    resetToken: String,
+    resetTokenExpiry: Date
 });
 
 module.exports = mongoose.model('Shop', shopSchema);

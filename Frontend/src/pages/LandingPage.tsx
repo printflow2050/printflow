@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Printer, QrCode, BarChart2, Clock, Shield, FileText, Zap, Award, Users } from 'lucide-react';
+import { isAuthenticated } from '../utils/auth';
 
 const LandingPage = () => {
   return (
@@ -13,16 +14,42 @@ const LandingPage = () => {
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-2 rounded-lg">
                 <Printer className="h-8 w-8 text-white" />
               </div>
-              <span className="ml-3 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">PrintFlow</span>
+              <span className="ml-3 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                PrintFlow
+              </span>
             </div>
             <div className="hidden md:flex items-center space-x-6">
-              <Link to="/login" className="text-gray-700 hover:text-blue-600 font-medium">Log in</Link>
-              <Link
-                to="/register"
-                className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-5 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-800 transition shadow-md"
-              >
-                Get Started Free
-              </Link>
+              {isAuthenticated() ? (
+                <>
+                  <Link
+                    to="/dashboard"
+                    className="text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200"
+                  >
+                    Go to Dashboard
+                  </Link>
+                  <Link
+                    to="/dashboard/analytics"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-5 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-800 transition-all duration-200 shadow-md"
+                  >
+                    View Analytics
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link 
+                    to="/login" 
+                    className="text-gray-700 hover:text-blue-600 font-medium transition-colors duration-200"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-5 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-800 transition-all duration-200 shadow-md"
+                  >
+                    Get Started Free
+                  </Link>
+                </>
+              )}
             </div>
             <div className="md:hidden">
               {/* Mobile menu button would go here */}
