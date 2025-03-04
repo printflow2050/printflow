@@ -1,36 +1,51 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const { Server } = require("socket.io");
+const http = require("http");
 
-//variables 
 const { MONGO_URL, PORT } = require("./config");
 
-//routes import
 const shopRoutes = require('./routes/shop');
-const printJobRoutes = require('./routes/printjobs');
-const uploadRoutes = require('./routes/upload'); // Add this line
+const printJobRoutes = require('./routes/printjobs'); // Note: Rename if needed to avoid confusion
+const uploadRoutes = require('./routes/upload');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Adjust to match your frontend port
+    methods: ["GET", "POST"]
+  }
+});
 
-//middlewares
+// Middlewares
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads')); // Serve static files from the uploads directory
+app.use('/uploads', express.static('uploads'));
 
-//db connection
+// DB connection
 mongoose.connect(MONGO_URL)
-.then(()=>{
-    console.log("Succesfully connected to  Mongodb..");
-})
-.catch((err)=>{
-    console.log(err);
-})
+  .then(() => console.log("Successfully connected to MongoDB.."))
+  .catch((err) => console.log(err));
 
-//routes
-app.use('/api/shop', shopRoutes); 
+// Set socket.io instance in app
+app.set("socketio", io);
+
+// Routes
+app.use('/api/shop', shopRoutes);
 app.use('/api/printjobs', printJobRoutes);
-app.use('/api/upload', uploadRoutes); // Add this line
+app.use('/api/upload', uploadRoutes);
 
-app.listen(PORT, ()=>{
-    console.log(`Server sucessfully running at port: ${PORT}`);
+// WebSocket connection
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server successfully running at port: ${PORT}`);
 });

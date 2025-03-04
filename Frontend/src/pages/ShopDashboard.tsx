@@ -4,6 +4,7 @@ import QRCode from 'react-qr-code';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { getToken, getShopId } from '../utils/auth';
+import { io, Socket } from 'socket.io-client';
 
 // Types
 interface PrintJob {
@@ -15,9 +16,11 @@ interface PrintJob {
   token: string;
   status: 'pending' | 'completed' | 'expired';
   uploadTime: Date;
+  fileName?: string;
+  fileSize?: number;
 }
 
-// Add QR Code Modal Component
+// QR Code Modal Component
 const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () => void; shop: any }) => {
   const qrCanvasRef = useRef<HTMLDivElement>(null);
 
@@ -39,10 +42,7 @@ const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () =
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium text-gray-900">Your Shop's QR Code</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
             <span className="sr-only">Close</span>
             <X className="h-6 w-6" />
           </button>
@@ -75,12 +75,51 @@ const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () =
 };
 
 const ShopDashboard = () => {
-  const [printJobs, setPrintJobs] = useState<any>([]);
+  const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [shop, setShop] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [showQRModal, setShowQRModal] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const socket = io('http://localhost:5000', {
+      auth: { token: getToken() }
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    socket.on('newPrintJob', (newJob: PrintJob) => {
+      setPrintJobs((prevJobs) => [...prevJobs, {
+        id: newJob.id,
+        fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
+        printType: newJob.printType,
+        printSide: newJob.printSide,
+        copies: newJob.copies,
+        token: newJob.token,
+        status: newJob.status,
+        uploadTime: new Date(newJob.uploadTime),
+        fileName: newJob.fileName,
+        fileSize: newJob.fileSize
+      }]);
+      toast.success('New print job received!');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  // Fetch shop details
   useEffect(() => {
     const fetchShopDetails = async () => {
       try {
@@ -102,6 +141,7 @@ const ShopDashboard = () => {
     fetchShopDetails();
   }, []);
 
+  // Fetch initial print jobs
   useEffect(() => {
     const fetchPrintJobs = async () => {
       try {
@@ -115,9 +155,18 @@ const ShopDashboard = () => {
         }
         const jobs = await response.json();
         console.log(jobs);
-        console.log(Array.isArray(jobs) ? jobs: []);
-        setPrintJobs(Array.isArray(jobs) ? jobs : []);
-        console.log(printJobs);
+        setPrintJobs(Array.isArray(jobs) ? jobs.map(job => ({
+          id: job._id,
+          fileType: job.fileName ? job.fileName.split('.').pop() : 'unknown', // Derive fileType from fileName
+          printType: job.print_type,
+          printSide: job.print_side,
+          copies: job.copies,
+          token: job.token_number,
+          status: job.status,
+          uploadTime: new Date(job.uploaded_at),
+          fileName: job.fileName,
+          fileSize: job.fileSize // Include fileSize from backend
+        })) : []);
         setIsLoading(false);
       } catch (error) {
         toast.error('Failed to fetch print jobs');
@@ -142,9 +191,20 @@ const ShopDashboard = () => {
         throw new Error('Failed to update print job status');
       }
       const updatedJob = await response.json();
-      setPrintJobs(prevJobs => 
-        prevJobs.map(job => 
-          job.id === jobId ? updatedJob : job
+      setPrintJobs(prevJobs =>
+        prevJobs.map(job =>
+          job.id === jobId ? {
+            id: updatedJob._id,
+            fileType: updatedJob.fileName ? updatedJob.fileName.split('.').pop() : 'unknown',
+            printType: updatedJob.print_type,
+            printSide: updatedJob.print_side,
+            copies: updatedJob.copies,
+            token: updatedJob.token_number,
+            status: updatedJob.status,
+            uploadTime: new Date(updatedJob.uploaded_at),
+            fileName: updatedJob.fileName,
+            fileSize: updatedJob.fileSize
+          } : job
         )
       );
       toast.success('Print job marked as completed');
@@ -175,7 +235,7 @@ const ShopDashboard = () => {
 
   const getUploadTimeDisplay = (date: Date) => {
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime - date.getTime) / (1000 * 60));
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
     
     if (diffInMinutes < 60) {
       return `${diffInMinutes} minutes ago`;
@@ -320,7 +380,7 @@ const ShopDashboard = () => {
               </nav>
             </div>
 
-            {/* Print Jobs List with updated styling */}
+            {/* Print Jobs List */}
             <div className="p-6">
               {isLoading ? (
                 <div className="flex justify-center items-center h-64">
@@ -354,7 +414,7 @@ const ShopDashboard = () => {
                               <div className="ml-4">
                                 <div className="flex items-center">
                                   <h4 className="text-sm font-medium text-gray-900 truncate max-w-xs">
-                                    {job.fileName}
+                                    {job.fileName || 'Unknown File'}
                                   </h4>
                                   <span className="ml-2 flex-shrink-0">
                                     {getStatusBadge(job.status)}
@@ -362,7 +422,7 @@ const ShopDashboard = () => {
                                 </div>
                                 <div className="mt-1 flex items-center text-sm text-gray-500">
                                   <span className="truncate">
-                                    {(job.fileSize / (1024 * 1024)).toFixed(1)} MB • 
+                                    {(job.fileSize ? (job.fileSize / (1024 * 1024)).toFixed(1) : 'N/A')} MB • 
                                     {job.printType === 'bw' ? ' Black & White' : ' Color'} • 
                                     {job.printSide === 'single' ? ' Single-sided' : ' Double-sided'} • 
                                     {job.copies} {job.copies === 1 ? 'copy' : 'copies'}
@@ -375,11 +435,10 @@ const ShopDashboard = () => {
                                 Token: <span className="text-primary">{job.token}</span>
                               </div>
                               <div className="text-xs text-gray-500">
-                                {getUploadTimeDisplay(job.uploaded_at)}
+                                {getUploadTimeDisplay(job.uploadTime)}
                               </div>
                             </div>
                           </div>
-                          
                           {job.status === 'pending' && (
                             <div className="mt-4 flex justify-end space-x-3">
                               <button
