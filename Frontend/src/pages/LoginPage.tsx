@@ -21,14 +21,25 @@ const LoginPage = () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Success - in a real app, this would validate credentials
+      const response = await fetch('http://localhost:5000/api/shop/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Invalid email or password');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('shopId', data.shop._id);
       toast.success('Login successful!');
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Invalid email or password');
+    } catch (error:any) {
+      toast.error(error.message);
     } finally {
       setIsLoading(false);
     }

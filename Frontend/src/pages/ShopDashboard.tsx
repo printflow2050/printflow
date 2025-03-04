@@ -1,16 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { Printer, FileText, Check, Trash2, QrCode, Clock, AlertCircle, X } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { getToken, getShopId } from '../utils/auth';
 
 // Types
 interface PrintJob {
   id: string;
-  fileName: string;
   fileType: string;
-  fileSize: number;
   printType: 'bw' | 'color';
   printSide: 'single' | 'double';
   copies: number;
@@ -20,7 +18,20 @@ interface PrintJob {
 }
 
 // Add QR Code Modal Component
-const QRCodeModal = ({ isOpen, onClose, shopId }: { isOpen: boolean; onClose: () => void; shopId: string }) => {
+const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () => void; shop: any }) => {
+  const qrCanvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (shop && qrCanvasRef.current) {
+      qrCanvasRef.current.innerHTML = "";
+      const img = new Image();
+      img.src = shop.qr_code;
+      img.style.width = '300px';
+      img.style.height = '300px';
+      qrCanvasRef.current.appendChild(img);
+    }
+  }, [isOpen, shop]);
+
   if (!isOpen) return null;
 
   return (
@@ -37,24 +48,21 @@ const QRCodeModal = ({ isOpen, onClose, shopId }: { isOpen: boolean; onClose: ()
           </button>
         </div>
         <div className="flex flex-col items-center">
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <QRCode
-              value={`https://xeroxflow.com/upload?shop_id=${shopId}`}
-              size={200}
-              level="H"
-            />
-          </div>
+          <div ref={qrCanvasRef} className="bg-white p-4 rounded-lg border border-gray-200"></div>
           <p className="mt-4 text-sm text-gray-500 text-center">
             Display this QR code in your shop for customers to scan and upload their files.
           </p>
           <div className="mt-4 text-center">
-            <p className="text-xs text-gray-500">Shop ID: {shopId}</p>
-            <p className="text-sm font-medium">ABC Xerox Center</p>
+            <p className="text-xs text-gray-500">Shop ID: {shop._id}</p>
+            <p className="text-sm font-medium">{shop.name}</p>
           </div>
           <button
             className="mt-6 inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
             onClick={() => {
-              // Add download QR code functionality
+              const link = document.createElement('a');
+              link.href = shop.qr_code;
+              link.download = `${shop.name}_QRCode.png`;
+              link.click();
               toast.success('QR Code downloaded successfully');
             }}
           >
@@ -67,97 +75,107 @@ const QRCodeModal = ({ isOpen, onClose, shopId }: { isOpen: boolean; onClose: ()
 };
 
 const ShopDashboard = () => {
-  const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
-  const [shopId, setShopId] = useState('shop_123456');
-  const [shopName, setShopName] = useState('ABC Xerox Center');
+  const [printJobs, setPrintJobs] = useState<any>([]);
+  const [shop, setShop] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [showQRModal, setShowQRModal] = useState(false);
 
-  // Mock data loading
   useEffect(() => {
-    const loadData = async () => {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock data
-      const mockJobs: PrintJob[] = [
-        {
-          id: '1',
-          fileName: 'business_proposal.pdf',
-          fileType: 'pdf',
-          fileSize: 2.4 * 1024 * 1024, // 2.4 MB
-          printType: 'bw',
-          printSide: 'double',
-          copies: 2,
-          token: '12345',
-          status: 'pending',
-          uploadTime: new Date(Date.now() - 15 * 60000), // 15 minutes ago
-        },
-        {
-          id: '2',
-          fileName: 'invoice_march.docx',
-          fileType: 'docx',
-          fileSize: 1.1 * 1024 * 1024, // 1.1 MB
-          printType: 'color',
-          printSide: 'single',
-          copies: 1,
-          token: '23456',
-          status: 'pending',
-          uploadTime: new Date(Date.now() - 45 * 60000), // 45 minutes ago
-        },
-        {
-          id: '3',
-          fileName: 'presentation.pptx',
-          fileType: 'pptx',
-          fileSize: 5.7 * 1024 * 1024, // 5.7 MB
-          printType: 'color',
-          printSide: 'single',
-          copies: 3,
-          token: '34567',
-          status: 'completed',
-          uploadTime: new Date(Date.now() - 120 * 60000), // 2 hours ago
-        },
-        {
-          id: '4',
-          fileName: 'report.pdf',
-          fileType: 'pdf',
-          fileSize: 3.2 * 1024 * 1024, // 3.2 MB
-          printType: 'bw',
-          printSide: 'double',
-          copies: 5,
-          token: '45678',
-          status: 'expired',
-          uploadTime: new Date(Date.now() - 26 * 60 * 60000), // 26 hours ago
-        },
-      ];
-      
-      setPrintJobs(mockJobs);
-      setIsLoading(false);
+    const fetchShopDetails = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/shop/${getShopId()}`, {
+          headers: {
+            'Authorization': `Bearer ${getToken()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch shop details');
+        }
+        const shop = await response.json();
+        setShop(shop);
+      } catch (error) {
+        toast.error('Failed to fetch shop details');
+      }
     };
-    
-    loadData();
+
+    fetchShopDetails();
   }, []);
 
-  const handleMarkAsCompleted = (jobId: string) => {
-    setPrintJobs(prevJobs => 
-      prevJobs.map(job => 
-        job.id === jobId ? { ...job, status: 'completed' } : job
-      )
-    );
-    toast.success('Print job marked as completed');
+  useEffect(() => {
+    const fetchPrintJobs = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/printjobs/prints/${getShopId()}`, {
+          headers: {
+            'Authorization': `Bearer ${getToken()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch print jobs');
+        }
+        const jobs = await response.json();
+        console.log(jobs);
+        console.log(Array.isArray(jobs) ? jobs: []);
+        setPrintJobs(Array.isArray(jobs) ? jobs : []);
+        console.log(printJobs);
+        setIsLoading(false);
+      } catch (error) {
+        toast.error('Failed to fetch print jobs');
+        setIsLoading(false);
+      }
+    };
+
+    fetchPrintJobs();
+  }, []);
+
+  const handleMarkAsCompleted = async (jobId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/printjobs/${jobId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ status: 'completed' }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update print job status');
+      }
+      const updatedJob = await response.json();
+      setPrintJobs(prevJobs => 
+        prevJobs.map(job => 
+          job.id === jobId ? updatedJob : job
+        )
+      );
+      toast.success('Print job marked as completed');
+    } catch (error) {
+      toast.error('Failed to update print job status');
+    }
   };
 
-  const handleDeleteJob = (jobId: string) => {
-    setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
-    toast.success('Print job deleted');
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/printjobs/${jobId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete print job');
+      }
+      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+      toast.success('Print job deleted');
+    } catch (error) {
+      toast.error('Failed to delete print job');
+    }
   };
 
   const filteredJobs = printJobs.filter(job => job.status === activeTab);
 
   const getUploadTimeDisplay = (date: Date) => {
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    const diffInMinutes = Math.floor((now.getTime - date.getTime) / (1000 * 60));
     
     if (diffInMinutes < 60) {
       return `${diffInMinutes} minutes ago`;
@@ -357,7 +375,7 @@ const ShopDashboard = () => {
                                 Token: <span className="text-primary">{job.token}</span>
                               </div>
                               <div className="text-xs text-gray-500">
-                                {getUploadTimeDisplay(job.uploadTime)}
+                                {getUploadTimeDisplay(job.uploaded_at)}
                               </div>
                             </div>
                           </div>
@@ -395,7 +413,7 @@ const ShopDashboard = () => {
       <QRCodeModal
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
-        shopId={shopId}
+        shop={shop}
       />
     </>
   );

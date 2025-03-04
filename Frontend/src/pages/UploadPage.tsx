@@ -11,6 +11,8 @@ const UploadPage = () => {
   const [searchParams] = useSearchParams();
   const shopId = searchParams.get('shop_id');
   const [shopName, setShopName] = useState('');
+  const [bwCostPerPage, setBwCostPerPage] = useState(0);
+  const [colorCostPerPage, setColorCostPerPage] = useState(0);
   
   const [file, setFile] = useState<File | null>(null);
   const [printType, setPrintType] = useState<PrintType>('bw');
@@ -21,13 +23,24 @@ const UploadPage = () => {
   const [token, setToken] = useState('');
 
   useEffect(() => {
-    // In a real app, this would fetch shop details from the API
-    if (shopId) {
-      // Simulate API call to get shop name
-      setTimeout(() => {
-        setShopName('ABC Xerox Center');
-      }, 500);
-    }
+    const fetchShopDetails = async () => {
+      if (shopId) {
+        try {
+          const response = await fetch(`http://localhost:5000/api/printjobs/${shopId}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch shop details');
+          }
+          const shop = await response.json();
+          setShopName(shop.name);
+          setBwCostPerPage(shop.bw_cost_per_page);
+          setColorCostPerPage(shop.color_cost_per_page);
+        } catch (error) {
+          toast.error('Failed to fetch shop details');
+        }
+      }
+    };
+
+    fetchShopDetails();
   }, [shopId]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -60,14 +73,24 @@ const UploadPage = () => {
     
     setIsUploading(true);
     
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('print_type', printType);
+    formData.append('print_side', printSide);
+    formData.append('copies', copies.toString());
+
     try {
-      // Simulate file upload
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Generate a random token
-      const randomToken = Math.floor(10000 + Math.random() * 90000).toString();
-      setToken(randomToken);
-      
+      const response = await fetch(`http://localhost:5000/api/upload/${shopId}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await response.json();
+      setToken(data.token_number);
       setUploadComplete(true);
       toast.success('File uploaded successfully!');
     } catch (error) {

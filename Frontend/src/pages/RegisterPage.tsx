@@ -32,7 +32,30 @@ const RegisterPage = () => {
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await fetch('http://localhost:5000/api/shop/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.shopName,
+          ownerName: formData.ownerName,
+          email: formData.email,
+          password: formData.password,
+          address: formData.address,
+          phone: formData.phone,
+          bw_cost_per_page: 0.10, // Example cost
+          color_cost_per_page: 0.25, // Example cost
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to register shop');
+      }
+
+      const shop = await response.json();
+      console.log(shop);
+
       toast.success('Registration successful!');
       navigate('/dashboard');
     } catch (error) {

@@ -1,14 +1,41 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Printer, BarChart2, LogOut, Menu, X, Settings, User } from 'lucide-react';
-import { useState } from 'react';
+import { isAuthenticated, getToken, getShopId, logout } from '../../utils/auth';
+import toast from 'react-hot-toast';
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [shop, setShop] = useState<any>(null);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/login');
+    } else {
+      const fetchShopDetails = async () => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/shop/${getShopId()}`, {
+            headers: {
+              'Authorization': `Bearer ${getToken()}`,
+            },
+          });
+          if (!response.ok) {
+            throw new Error('Failed to fetch shop details');
+          }
+          const shop = await response.json();
+          setShop(shop);
+        } catch (error) {
+          toast.error('Failed to fetch shop details');
+        }
+      };
+
+      fetchShopDetails();
+    }
+  }, [navigate]);
+
   const handleLogout = () => {
-    // TODO: Implement actual logout logic
+    logout();
     navigate('/login');
   };
 
@@ -55,10 +82,10 @@ const DashboardLayout = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  ABC Xerox Center
+                  {shop?.name || 'Loading...'}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  admin@abcxerox.com
+                  {shop?.email || 'Loading...'}
                 </p>
               </div>
             </div>
