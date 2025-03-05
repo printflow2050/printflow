@@ -17,12 +17,11 @@ interface PrintJob {
   token: string;
   status: 'pending' | 'completed' | 'expired';
   uploadTime: Date;
-  file_path: string; // Ensure file_path is included
+  file_path: string;
   fileName?: string;
   fileSize?: number;
 }
 
-// Updated QR Code Modal Component
 // QR Code Modal Component
 const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () => void; shop: any }) => {
   if (!isOpen) return null;
@@ -80,13 +79,13 @@ const ShopDashboard = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [showQRModal, setShowQRModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
   const socketRef = useRef<Socket | null>(null);
 
   // Initialize WebSocket connection
   useEffect(() => {
     const socket = io('http://localhost:5000', {
-      auth: { token: getToken() }
+      auth: { token: getToken() },
+      transports: ['websocket'],
     });
     socketRef.current = socket;
 
@@ -95,18 +94,22 @@ const ShopDashboard = () => {
     });
 
     socket.on('newPrintJob', (newJob: PrintJob) => {
-      setPrintJobs((prevJobs) => [...prevJobs, {
-        id: newJob.id,
-        fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
-        printType: newJob.printType,
-        printSide: newJob.printSide,
-        copies: newJob.copies,
-        token: newJob.token,
-        status: newJob.status,
-        uploadTime: new Date(newJob.uploadTime),
-        fileName: newJob.fileName,
-        fileSize: newJob.fileSize
-      }]);
+      setPrintJobs((prevJobs) => {
+        if (prevJobs.some(job => job.id === newJob.id)) return prevJobs;
+        return [...prevJobs, {
+          id: newJob.id,
+          fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
+          printType: newJob.printType,
+          printSide: newJob.printSide,
+          copies: newJob.copies,
+          token: newJob.token,
+          status: newJob.status,
+          uploadTime: new Date(newJob.uploadTime),
+          file_path: newJob.file_path,
+          fileName: newJob.fileName,
+          fileSize: newJob.fileSize
+        }];
+      });
       toast.success('New print job received!');
     });
 
@@ -155,18 +158,19 @@ const ShopDashboard = () => {
           throw new Error('Failed to fetch print jobs');
         }
         const jobs = await response.json();
-        console.log(jobs);
+        console.log('Initial jobs:', jobs);
         setPrintJobs(Array.isArray(jobs) ? jobs.map(job => ({
           id: job._id,
-          fileType: job.fileName ? job.fileName.split('.').pop() : 'unknown', // Derive fileType from fileName
+          fileType: job.fileName ? job.fileName.split('.').pop() : 'unknown',
           printType: job.print_type,
           printSide: job.print_side,
           copies: job.copies,
           token: job.token_number,
           status: job.status,
           uploadTime: new Date(job.uploaded_at),
+          file_path: job.file_path,
           fileName: job.fileName,
-          fileSize: job.fileSize // Include fileSize from backend
+          fileSize: job.fileSize
         })) : []);
         setIsLoading(false);
       } catch (error) {
@@ -195,26 +199,24 @@ const ShopDashboard = () => {
 
       const updatedJob = await response.json();
 
-      // Update the local state with the updated job
+      // Map the backend response to the PrintJob interface
       setPrintJobs(prevJobs =>
         prevJobs.map(job =>
-          job._id === jobId ? updatedJob : job,
-          setPrintJobs(prevJobs =>
-            prevJobs.map(job =>
-              job.id === jobId ? {
-                id: updatedJob._id,
-                fileType: updatedJob.fileName ? updatedJob.fileName.split('.').pop() : 'unknown',
-                printType: updatedJob.print_type,
-                printSide: updatedJob.print_side,
-                copies: updatedJob.copies,
-                token: updatedJob.token_number,
-                status: updatedJob.status,
-                uploadTime: new Date(updatedJob.uploaded_at),
-                fileName: updatedJob.fileName,
-                fileSize: updatedJob.fileSize
-              } : job
-            )
-          )));
+          job.id === jobId ? {
+            id: updatedJob._id,
+            fileType: updatedJob.fileName ? updatedJob.fileName.split('.').pop() : 'unknown',
+            printType: updatedJob.print_type,
+            printSide: updatedJob.print_side,
+            copies: updatedJob.copies,
+            token: updatedJob.token_number,
+            status: updatedJob.status,
+            uploadTime: new Date(updatedJob.uploaded_at),
+            file_path: updatedJob.file_path,
+            fileName: updatedJob.fileName,
+            fileSize: updatedJob.fileSize
+          } : job
+        )
+      );
 
       toast.success('Print job marked as completed');
     } catch (error) {
@@ -236,8 +238,7 @@ const ShopDashboard = () => {
         throw new Error('Failed to delete print job');
       }
 
-      // Remove the deleted job from local state
-      setPrintJobs(prevJobs => prevJobs.filter(job => job._id !== jobId));
+      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
       toast.success('Print job deleted successfully');
     } catch (error) {
       console.error('Error deleting job:', error);
@@ -248,7 +249,7 @@ const ShopDashboard = () => {
   const filteredJobs = printJobs.filter(job => job.status === activeTab);
 
   const filteredAndSearchedJobs = filteredJobs.filter(job =>
-    job.token_number?.toString().toLowerCase().includes(searchQuery.toLowerCase())
+    job.token.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getUploadTimeDisplay = (date: Date) => {
@@ -302,7 +303,7 @@ const ShopDashboard = () => {
       const response = await fetch(`http://localhost:5000/${filePath}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${getToken()}`, // If authentication is required
+          'Authorization': `Bearer ${getToken()}`,
         },
       });
 
@@ -318,7 +319,7 @@ const ShopDashboard = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url); // Clean up the URL object
+      window.URL.revokeObjectURL(url);
       toast.success('File downloaded successfully');
     } catch (error: any) {
       console.error('Download error:', error);
@@ -326,7 +327,6 @@ const ShopDashboard = () => {
     }
   };
 
-  // Add this helper function at the top of your component
   const formatFileName = (filePath: string) => {
     const fileName = filePath.split(/[/\\]/).pop() || '';
     return fileName.replace(/^\d+-/, '');
@@ -482,8 +482,7 @@ const ShopDashboard = () => {
                               <div className="ml-4">
                                 <div className="flex items-center">
                                   <h4 className="text-sm font-medium text-gray-900 truncate max-w-xs">
-                                    {formatFileName(job.file_path)}
-                                    {job.fileName || 'Unknown File'}
+                                    {job.fileName || formatFileName(job.file_path)}
                                   </h4>
                                   <span className="ml-2 flex-shrink-0">{getStatusBadge(job.status)}</span>
                                 </div>
@@ -532,7 +531,7 @@ const ShopDashboard = () => {
                                 Delete
                               </button>
                               <button
-                                onClick={() => handleDownloadFile(job.file_path, formatFileName(job.file_path))}
+                                onClick={() => handleDownloadFile(job.file_path, job.fileName || formatFileName(job.file_path))}
                                 className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                               >
                                 <FileText className="h-3.5 w-3.5 mr-1" />

@@ -106,7 +106,7 @@ const verifyToken = (req, res, next) => {
 };
 
 // Fetch shop details by ID route
-router.get('/:shopId', verifyToken, async (req, res) => {
+router.get('/:shopId', async (req, res) => {
     try {
         const shop = await Shop.findById(req.params.shopId);
         if (!shop) {
