@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Shop = require('../models/shop');
 const PrintJob = require('../models/printjob');
+const fs = require('fs').promises;
+const path = require('path');
 
-// Fetch shop details by ID (should ideally be in shop.js, but kept here as per your current setup)
+// Fetch shop details by ID
 router.get('/:shopId', async (req, res) => {
     try {
         const shop = await Shop.findById(req.params.shopId).select('name bw_cost_per_page color_cost_per_page');
@@ -16,11 +18,20 @@ router.get('/:shopId', async (req, res) => {
     }
 });
 
-// Fetch print jobs by shop ID
+// Fetch print jobs by shop ID, filtered by current day
 router.get('/prints/:shopId', async (req, res) => {
     try {
-        const printJobs = await PrintJob.find({ shop_id: req.params.shopId });
-        console.log("Fetched print jobs:", printJobs);
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const printJobs = await PrintJob.find({
+            shop_id: req.params.shopId,
+            uploaded_at: { $gte: startOfDay, $lte: endOfDay },
+            status: { $in: ['pending', 'completed'] } // Exclude "deleted" status
+        });
+        console.log("Fetched print jobs for today:", printJobs);
         res.status(200).json(printJobs);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch print jobs' });
@@ -46,7 +57,7 @@ router.get('/status/:token', async (req, res) => {
     }
 });
 
-// Update print job status (consolidated PUT route with WebSocket emission)
+// Update print job status
 router.put('/:jobId', async (req, res) => {
     try {
         const { status } = req.body;
@@ -60,7 +71,6 @@ router.put('/:jobId', async (req, res) => {
             return res.status(404).json({ error: 'Print job not found' });
         }
 
-        // Emit WebSocket event for status update
         const io = req.app.get("socketio");
         io.emit('jobStatusUpdate', {
             id: printJob._id,
@@ -82,16 +92,34 @@ router.put('/:jobId', async (req, res) => {
     }
 });
 
-// Delete print job
+// Delete print job (set file_path to null and status to "deleted")
 router.delete('/:jobId', async (req, res) => {
     try {
-        const deletedJob = await PrintJob.findByIdAndDelete(req.params.jobId);
+        const printJob = await PrintJob.findById(req.params.jobId);
         
-        if (!deletedJob) {
+        if (!printJob) {
             return res.status(404).json({ error: 'Print job not found' });
         }
-        
-        res.status(200).json({ message: 'Print job deleted successfully' });
+
+        // Delete the file from disk if file_path exists
+        if (printJob.file_path) {
+            const filePath = path.join(__dirname, '..', printJob.file_path);
+            try {
+                await fs.unlink(filePath);
+                console.log(`Deleted file: ${filePath}`);
+            } catch (fileError) {
+                console.error('Error deleting file from disk:', fileError);
+            }
+        }
+
+        // Update the document: set file_path to null and status to "deleted"
+        const updatedJob = await PrintJob.findByIdAndUpdate(
+            req.params.jobId,
+            { file_path: null, status: 'deleted' },
+            { new: true }
+        );
+
+        res.status(200).json({ message: 'Print job file deleted and marked as deleted', job: updatedJob });
     } catch (error) {
         console.error('Error deleting print job:', error);
         res.status(500).json({ error: 'Failed to delete print job' });

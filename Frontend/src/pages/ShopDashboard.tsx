@@ -15,9 +15,9 @@ interface PrintJob {
   printSide: 'single' | 'double';
   copies: number;
   token: string;
-  status: 'pending' | 'completed' | 'expired';
+  status: 'pending' | 'completed' | 'expired' | 'deleted'; // Added 'deleted'
   uploadTime: Date;
-  file_path: string;
+  file_path: string | null;
   fileName?: string;
   fileSize?: number;
 }
@@ -94,23 +94,30 @@ const ShopDashboard = () => {
     });
 
     socket.on('newPrintJob', (newJob: PrintJob) => {
-      setPrintJobs((prevJobs) => {
-        if (prevJobs.some(job => job.id === newJob.id)) return prevJobs;
-        return [...prevJobs, {
-          id: newJob.id,
-          fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
-          printType: newJob.printType,
-          printSide: newJob.printSide,
-          copies: newJob.copies,
-          token: newJob.token,
-          status: newJob.status,
-          uploadTime: new Date(newJob.uploadTime),
-          file_path: newJob.file_path,
-          fileName: newJob.fileName,
-          fileSize: newJob.fileSize
-        }];
-      });
-      toast.success('New print job received!');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const uploadDate = new Date(newJob.uploadTime);
+      uploadDate.setHours(0, 0, 0, 0);
+
+      if (today.getTime() === uploadDate.getTime()) {
+        setPrintJobs((prevJobs) => {
+          if (prevJobs.some(job => job.id === newJob.id)) return prevJobs;
+          return [...prevJobs, {
+            id: newJob.id,
+            fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
+            printType: newJob.printType,
+            printSide: newJob.printSide,
+            copies: newJob.copies,
+            token: newJob.token,
+            status: newJob.status,
+            uploadTime: new Date(newJob.uploadTime),
+            file_path: newJob.file_path,
+            fileName: newJob.fileName,
+            fileSize: newJob.fileSize
+          }];
+        });
+        toast.success('New print job received!');
+      }
     });
 
     socket.on('disconnect', () => {
@@ -145,7 +152,7 @@ const ShopDashboard = () => {
     fetchShopDetails();
   }, []);
 
-  // Fetch initial print jobs
+  // Fetch initial print jobs for today
   useEffect(() => {
     const fetchPrintJobs = async () => {
       try {
@@ -158,7 +165,7 @@ const ShopDashboard = () => {
           throw new Error('Failed to fetch print jobs');
         }
         const jobs = await response.json();
-        console.log('Initial jobs:', jobs);
+        console.log('Initial jobs for today:', jobs);
         setPrintJobs(Array.isArray(jobs) ? jobs.map(job => ({
           id: job._id,
           fileType: job.fileName ? job.fileName.split('.').pop() : 'unknown',
@@ -199,7 +206,6 @@ const ShopDashboard = () => {
 
       const updatedJob = await response.json();
 
-      // Map the backend response to the PrintJob interface
       setPrintJobs(prevJobs =>
         prevJobs.map(job =>
           job.id === jobId ? {
@@ -238,8 +244,9 @@ const ShopDashboard = () => {
         throw new Error('Failed to delete print job');
       }
 
+      // Remove the job from the list since it’s marked "deleted" in the backend
       setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
-      toast.success('Print job deleted successfully');
+      toast.success('Print job file deleted successfully');
     } catch (error) {
       console.error('Error deleting job:', error);
       toast.error('Failed to delete print job');
@@ -298,7 +305,11 @@ const ShopDashboard = () => {
     }
   };
 
-  const handleDownloadFile = async (filePath: string, fileName: string) => {
+  const handleDownloadFile = async (filePath: string | null, fileName: string) => {
+    if (!filePath) {
+      toast.error('File has been deleted');
+      return;
+    }
     try {
       const response = await fetch(`http://localhost:5000/${filePath}`, {
         method: 'GET',
@@ -327,7 +338,8 @@ const ShopDashboard = () => {
     }
   };
 
-  const formatFileName = (filePath: string) => {
+  const formatFileName = (filePath: string | null) => {
+    if (!filePath) return 'File Deleted';
     const fileName = filePath.split(/[/\\]/).pop() || '';
     return fileName.replace(/^\d+-/, '');
   };
@@ -347,7 +359,7 @@ const ShopDashboard = () => {
                   <h1 className="text-2xl font-bold text-gray-900">Print Jobs Dashboard</h1>
                 </div>
                 <p className="mt-1 text-sm text-gray-500">
-                  Manage your print jobs and track customer requests
+                  Manage your print jobs and track customer requests (Today Only)
                 </p>
               </div>
               <div className="mt-4 md:mt-0">
@@ -373,7 +385,7 @@ const ShopDashboard = () => {
                   <Clock className="h-5 w-5 text-blue-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Pending Jobs</p>
+                  <p className="text-sm font-medium text-gray-500">Pending Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
                     {printJobs.filter(job => job.status === 'pending').length}
                   </h3>
@@ -386,7 +398,7 @@ const ShopDashboard = () => {
                   <Check className="h-5 w-5 text-green-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Completed Jobs</p>
+                  <p className="text-sm font-medium text-gray-500">Completed Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
                     {printJobs.filter(job => job.status === 'completed').length}
                   </h3>
@@ -399,7 +411,7 @@ const ShopDashboard = () => {
                   <AlertCircle className="h-5 w-5 text-red-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Expired Jobs</p>
+                  <p className="text-sm font-medium text-gray-500">Expired Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
                     {printJobs.filter(job => job.status === 'expired').length}
                   </h3>
@@ -423,7 +435,6 @@ const ShopDashboard = () => {
             </div>
           </div>
 
-          {/* Updated Tabs */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 mb-6">
             <div className="border-b border-gray-200">
               <nav className="flex space-x-8 px-6">
@@ -446,7 +457,6 @@ const ShopDashboard = () => {
               </nav>
             </div>
 
-            {/* Print Jobs List */}
             <div className="p-6">
               {isLoading ? (
                 <div className="flex justify-center items-center h-64">
@@ -458,16 +468,16 @@ const ShopDashboard = () => {
                     <Search className="h-6 w-6 text-gray-400" />
                   </div>
                   <h3 className="mt-3 text-sm font-medium text-gray-900">
-                    {searchQuery ? "No jobs found with that token number" : `No ${activeTab} print jobs`}
+                    {searchQuery ? "No jobs found with that token number" : `No ${activeTab} print jobs for today`}
                   </h3>
                   <p className="mt-2 text-sm text-gray-500">
                     {searchQuery
                       ? "Try searching with a different token number"
                       : activeTab === 'pending'
-                        ? "You don't have any pending print jobs at the moment."
+                        ? "You don't have any pending print jobs today."
                         : activeTab === 'completed'
-                          ? "You haven't completed any print jobs yet."
-                          : "You don't have any expired print jobs."}
+                          ? "You haven't completed any print jobs today."
+                          : "You don't have any expired print jobs today."}
                   </p>
                 </div>
               ) : (
@@ -550,7 +560,6 @@ const ShopDashboard = () => {
         </div>
       </div>
 
-      {/* QR Code Modal */}
       <QRCodeModal
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
