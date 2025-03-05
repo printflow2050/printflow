@@ -12,7 +12,8 @@ const shopSchema = new mongoose.Schema({
     color_cost_per_page: { type: Number, required: true },
     created_at: { type: Date, default: Date.now },
     resetToken: String,
-    resetTokenExpiry: Date
+    resetTokenExpiry: Date,
+    isAcceptingUploads: { type: Boolean, default: true }
 });
 
 module.exports = mongoose.model('Shop', shopSchema);
