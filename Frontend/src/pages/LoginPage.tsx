@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Printer, ArrowLeft, Mail, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_ENDPOINTS, STATIC_VARIABLES } from '../config';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    rememberMe: false
+    rememberMe: false,
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -18,18 +19,18 @@ const LoginPage = () => {
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      rememberMe: e.target.checked
+      rememberMe: e.target.checked,
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     try {
-      const response = await fetch('http://localhost:5000/api/shop/login', {
+      const response = await fetch(API_ENDPOINTS.SHOP_LOGIN, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,11 +43,11 @@ const LoginPage = () => {
       }
 
       const data = await response.json();
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('shopId', data.shop._id);
+      localStorage.setItem(STATIC_VARIABLES.LOCAL_STORAGE_KEYS.TOKEN, data.token);
+      localStorage.setItem(STATIC_VARIABLES.LOCAL_STORAGE_KEYS.SHOP_ID, data.shop._id);
       toast.success('Login successful!');
-      navigate('/dashboard');
-    } catch (error:any) {
+      navigate(STATIC_VARIABLES.LOGIN_REDIRECT_PATH);
+    } catch (error: any) {
       toast.error(error.message);
     } finally {
       setIsLoading(false);
@@ -63,8 +64,8 @@ const LoginPage = () => {
       </div>
 
       <div className="absolute top-4 left-4 z-20">
-        <Link 
-          to="/" 
+        <Link
+          to="/"
           className="group flex items-center space-x-2 px-4 py-2 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm hover:bg-white transition-all duration-200"
         >
           <ArrowLeft className="h-4 w-4 text-gray-600 group-hover:-translate-x-1 transition-transform duration-200" />
@@ -73,7 +74,6 @@ const LoginPage = () => {
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
-        
         <div className="flex justify-center items-center">
           <div className="flex items-center">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-2 rounded-lg">
@@ -84,12 +84,10 @@ const LoginPage = () => {
             </span>
           </div>
         </div>
-        
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Welcome Back
-        </h2>
+
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Welcome Back</h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500 transition duration-200">
             Register your shop
           </Link>
@@ -159,12 +157,12 @@ const LoginPage = () => {
               </div>
 
               <div className="text-sm">
-                <Link
+                {/* <Link
                   to="/forgot-password"
                   className="font-medium text-indigo-600 hover:text-indigo-500 transition duration-200"
                 >
                   Forgot your password?
-                </Link>
+                </Link> */}
               </div>
             </div>
 
@@ -181,8 +179,7 @@ const LoginPage = () => {
 
           <div className="mt-6">
             <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-              </div>
+              <div className="absolute inset-0 flex items-center"></div>
             </div>
           </div>
         </div>
@@ -190,8 +187,13 @@ const LoginPage = () => {
 
       <div className="mt-8 text-center text-xs text-gray-500 z-10">
         By signing in, you agree to our{' '}
-        <a href="#" className="text-indigo-600 hover:text-indigo-500">Terms of Service</a> and{' '}
-        <a href="#" className="text-indigo-600 hover:text-indigo-500">Privacy Policy</a>
+        <a href="#" className="text-indigo-600 hover:text-indigo-500">
+          Terms of Service
+        </a>{' '}
+        and{' '}
+        <a href="#" className="text-indigo-600 hover:text-indigo-500">
+          Privacy Policy
+        </a>
       </div>
     </div>
   );

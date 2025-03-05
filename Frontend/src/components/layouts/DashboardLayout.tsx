@@ -107,7 +107,7 @@ const DashboardLayout = () => {
               <Printer className="mr-3 h-5 w-5" />
               Print Jobs
             </NavLink>
-            <NavLink
+            {/* <NavLink
               to="/dashboard/analytics"
               className={({ isActive }) =>
                 `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-150 ${
@@ -119,18 +119,18 @@ const DashboardLayout = () => {
             >
               <BarChart2 className="mr-3 h-5 w-5" />
               Analytics
-            </NavLink>
+            </NavLink> */}
           </nav>
 
           {/* Bottom Actions */}
           <div className="p-4 border-t border-gray-200">
-            <button
+            {/* <button
               onClick={() => navigate('/dashboard/settings')}
               className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 mb-2 transition-colors duration-150"
             >
               <Settings className="mr-3 h-5 w-5" />
               Settings
-            </button>
+            </button> */}
             <button
               onClick={handleLogout}
               className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors duration-150"

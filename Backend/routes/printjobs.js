@@ -71,6 +71,17 @@ router.put('/:jobId', async (req, res) => {
             return res.status(404).json({ error: 'Print job not found' });
         }
 
+        // Delete the file from disk if file_path exists
+        if (printJob.file_path) {
+            const filePath = path.join(__dirname, '..', printJob.file_path);
+            try {
+                await fs.unlink(filePath);
+                console.log(`Deleted file: ${filePath}`);
+            } catch (fileError) {
+                console.error('Error deleting file from disk:', fileError);
+            }
+        }
+
         const io = req.app.get("socketio");
         io.emit('jobStatusUpdate', {
             id: printJob._id,

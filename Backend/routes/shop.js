@@ -192,26 +192,12 @@ router.put('/:shopId/toggle-uploads', verifyToken, async (req, res) => {
     if (!shop) {
       return res.status(404).json({ error: 'Shop not found' });
     }
-    
-    res.status(200).json(shop);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update shop status' });
-  }
-});
 
-// Backend/routes/shop.js
-router.put('/:shopId/toggle-uploads', verifyToken, async (req, res) => {
-  try {
-    const { isAcceptingUploads } = req.body;
-    const shop = await Shop.findByIdAndUpdate(
-      req.params.shopId,
-      { isAcceptingUploads },
-      { new: true }
-    );
-    
-    if (!shop) {
-      return res.status(404).json({ error: 'Shop not found' });
-    }
+    // Emit WebSocket event to all clients in the shop's room
+    const io = req.app.get("socketio");
+    io.to(`shop_${shop._id}`).emit("shopStatusUpdate", {
+      isAcceptingUploads: shop.isAcceptingUploads
+    });
     
     res.status(200).json(shop);
   } catch (error) {

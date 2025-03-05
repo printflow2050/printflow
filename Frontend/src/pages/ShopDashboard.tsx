@@ -565,8 +565,9 @@ const ShopDashboard = () => {
                                 </div>
                                 <div className="mt-2 flex items-center space-x-2">
                                   <span
-                                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${job.printType === 'bw' ? 'bg-gray-100 text-gray-800' : 'bg-blue-50 text-blue-700'
-                                      }`}
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                                      job.printType === 'bw' ? 'bg-gray-100 text-gray-800' : 'bg-blue-50 text-blue-700'
+                                    }`}
                                   >
                                     {job.printType === 'bw' ? 'Black & White' : 'Color'}
                                   </span>
@@ -576,11 +577,12 @@ const ShopDashboard = () => {
                                   <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700">
                                     {job.copies} {job.copies === 1 ? 'copy' : 'copies'}
                                   </span>
-                                </div>
-                                <div className="mt-1 flex items-center text-sm text-gray-500">
-                                  <span className="truncate">
-                                    {(job.fileSize ? (job.fileSize / (1024 * 1024)).toFixed(1) : 'N/A')} MB
-                                  </span>
+                                  {/* Add file size badge */}
+                                  {job.fileSize && (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                                      {(job.fileSize / (1024 * 1024)).toFixed(1)} MB
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>

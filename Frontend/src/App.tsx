@@ -30,7 +30,7 @@ function App() {
         {/* Protected routes */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<ShopDashboard />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          {/* <Route path="analytics" element={<AnalyticsPage />} /> */}
         </Route>
         
         {/* 404 route */}

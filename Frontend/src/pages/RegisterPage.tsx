@@ -58,7 +58,7 @@ const RegisterPage = () => {
       console.log(shop);
 
       toast.success('Registration successful!');
-      navigate('/dashboard');
+      navigate('/login');
     } catch (error) {
       toast.error('Registration failed. Please try again.');
     } finally {
