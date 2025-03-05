@@ -48,7 +48,7 @@ const QRCodeModal = ({ isOpen, onClose, shop }: { isOpen: boolean; onClose: () =
         <div className="flex flex-col items-center">
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <QRCode
-              value={`https://xeroxflow.com/upload?shop_id=${shop._id}`}
+              value={`https://localhost:5173/upload?shop_id=${shop._id}`}
               size={200}
               level="H"
             />
@@ -79,6 +79,7 @@ const ShopDashboard = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [showQRModal, setShowQRModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAcceptingUploads, setIsAcceptingUploads] = useState(false);
 
   useEffect(() => {
     const fetchShopDetails = async () => {
@@ -93,6 +94,7 @@ const ShopDashboard = () => {
         }
         const shop = await response.json();
         setShop(shop);
+        setIsAcceptingUploads(shop.isAcceptingUploads);
       } catch (error) {
         toast.error('Failed to fetch shop details');
       }
@@ -177,6 +179,28 @@ const ShopDashboard = () => {
     } catch (error) {
       console.error('Error deleting job:', error);
       toast.error('Failed to delete print job');
+    }
+  };
+
+  const handleToggleUploads = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/shop/${getShopId()}/toggle-uploads`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ isAcceptingUploads: !isAcceptingUploads }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update shop status');
+      }
+
+      setIsAcceptingUploads(!isAcceptingUploads);
+      toast.success(`Upload form ${!isAcceptingUploads ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      toast.error('Failed to update shop status');
     }
   };
 
@@ -285,7 +309,47 @@ const ShopDashboard = () => {
                   Manage your print jobs and track customer requests
                 </p>
               </div>
-              <div className="mt-4 md:mt-0">
+              <div className="mt-4 md:mt-0 flex space-x-4">
+                <div className="relative">
+                  <button
+                    onClick={handleToggleUploads}
+                    className={`
+                      flex items-center space-x-3 px-6 py-3 rounded-lg shadow-lg 
+                      transition-all duration-300 transform hover:scale-105
+                      ${isAcceptingUploads 
+                        ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
+                        : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+                      } text-white font-medium
+                    `}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className={`
+                        w-3 h-3 rounded-full shadow-inner animate-pulse
+                        ${isAcceptingUploads ? 'bg-green-300' : 'bg-red-300'}
+                      `} />
+                      <span className="text-sm font-semibold">
+                        {isAcceptingUploads ? 'File Uploads: Enabled' : 'File Uploads: Disabled'}
+                      </span>
+                    </div>
+                    <div className={`
+                      w-12 h-6 rounded-full p-1 transition-colors duration-300
+                      ${isAcceptingUploads ? 'bg-green-400' : 'bg-red-400'}
+                    `}>
+                      <div className={`
+                        bg-white w-4 h-4 rounded-full shadow-md 
+                        transition-transform duration-300 ease-in-out
+                        ${isAcceptingUploads ? 'translate-x-6' : 'translate-x-0'}
+                      `} />
+                    </div>
+                  </button>
+                  <div className={`
+                    absolute -bottom-8 left-0 right-0 text-center text-xs
+                    ${isAcceptingUploads ? 'text-green-600' : 'text-red-600'}
+                    font-medium transition-colors duration-300
+                  `}>
+                  </div>
+                </div>
+                
                 <button
                   onClick={() => setShowQRModal(true)}
                   className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"

@@ -106,16 +106,16 @@ const verifyToken = (req, res, next) => {
 };
 
 // Fetch shop details by ID route
-router.get('/:shopId', verifyToken, async (req, res) => {
-    try {
-        const shop = await Shop.findById(req.params.shopId);
-        if (!shop) {
-            return res.status(404).json({ error: 'Shop not found' });
-        }
-        res.status(200).json(shop);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch shop details' });
+router.get('/:shopId', async (req, res) => {
+  try {
+    const shop = await Shop.findById(req.params.shopId);
+    if (!shop) {
+      return res.status(404).json({ error: 'Shop not found' });
     }
+    res.json(shop);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch shop details' });
+  }
 });
 
 // Add these new routes for password reset
@@ -177,6 +177,26 @@ router.post('/reset-password', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: 'Failed to reset password' });
     }
+});
+
+// Backend/routes/shop.js
+router.put('/:shopId/toggle-uploads', verifyToken, async (req, res) => {
+  try {
+    const { isAcceptingUploads } = req.body;
+    const shop = await Shop.findByIdAndUpdate(
+      req.params.shopId,
+      { isAcceptingUploads },
+      { new: true }
+    );
+    
+    if (!shop) {
+      return res.status(404).json({ error: 'Shop not found' });
+    }
+    
+    res.status(200).json(shop);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update shop status' });
+  }
 });
 
 module.exports = router;
