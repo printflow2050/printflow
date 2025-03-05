@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Printer, ArrowLeft, Mail, Lock, User, Building, Phone, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_ENDPOINTS, STATIC_VARIABLES } from '../config';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -23,16 +24,16 @@ const RegisterPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
-      const response = await fetch('http://localhost:5000/api/shop/register', {
+      const response = await fetch(API_ENDPOINTS.SHOP_REGISTER, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,8 +45,8 @@ const RegisterPage = () => {
           password: formData.password,
           address: formData.address,
           phone: formData.phone,
-          bw_cost_per_page: 0.10, // Example cost
-          color_cost_per_page: 0.25, // Example cost
+          bw_cost_per_page: STATIC_VARIABLES.DEFAULT_BW_COST_PER_PAGE, // From config
+          color_cost_per_page: STATIC_VARIABLES.DEFAULT_COLOR_COST_PER_PAGE, // From config
         }),
       });
 
@@ -75,8 +76,8 @@ const RegisterPage = () => {
       </div>
 
       <div className="absolute top-4 left-4 z-20">
-        <Link 
-          to="/" 
+        <Link
+          to="/"
           className="group flex items-center space-x-2 px-4 py-2 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm hover:bg-white transition-all duration-200"
         >
           <ArrowLeft className="h-4 w-4 text-gray-600 group-hover:-translate-x-1 transition-transform duration-200" />
@@ -85,7 +86,6 @@ const RegisterPage = () => {
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md z-10">
-        
         <div className="flex justify-center items-center">
           <div className="flex items-center">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-2 rounded-lg">
@@ -96,7 +96,7 @@ const RegisterPage = () => {
             </span>
           </div>
         </div>
-        
+
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Register your Xerox shop
         </h2>
@@ -274,8 +274,13 @@ const RegisterPage = () => {
 
       <div className="mt-8 text-center text-xs text-gray-500 z-10">
         By registering, you agree to our{' '}
-        <a href="#" className="text-indigo-600 hover:text-indigo-500">Terms of Service</a> and{' '}
-        <a href="#" className="text-indigo-600 hover:text-indigo-500">Privacy Policy</a>
+        <a href="#" className="text-indigo-600 hover:text-indigo-500">
+          Terms of Service
+        </a>{' '}
+        and{' '}
+        <a href="#" className="text-indigo-600 hover:text-indigo-500">
+          Privacy Policy
+        </a>
       </div>
     </div>
   );

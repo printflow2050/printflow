@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Printer, FileText, Check, Trash2, QrCode, Clock, AlertCircle, X, Search } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { format } from 'date-fns';
@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { getToken, getShopId } from '../utils/auth';
 import { generateShopQRCodePDF } from '../utils/pdfGenerator';
 import { io, Socket } from 'socket.io-client';
+import { API_ENDPOINTS, STATIC_VARIABLES } from '../config'; // Adjust path if needed
 
 // Types
 interface PrintJob {
@@ -15,7 +16,7 @@ interface PrintJob {
   printSide: 'single' | 'double';
   copies: number;
   token: string;
-  status: 'pending' | 'completed' | 'expired' | 'deleted'; // Added 'deleted'
+  status: 'pending' | 'completed' | 'expired' | 'deleted';
   uploadTime: Date;
   file_path: string | null;
   fileName?: string;
@@ -76,16 +77,18 @@ const ShopDashboard = () => {
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [shop, setShop] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'expired'>(
+    STATIC_VARIABLES.STATUS_TYPES.PENDING
+  );
   const [showQRModal, setShowQRModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const socketRef = useRef<Socket | null>(null);
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
+    const socket = io(STATIC_VARIABLES.SOCKET_URL, {
       auth: { token: getToken() },
-      transports: ['websocket'],
+      transports: [...STATIC_VARIABLES.SOCKET_TRANSPORTS],
     });
     socketRef.current = socket;
 
@@ -104,7 +107,7 @@ const ShopDashboard = () => {
           if (prevJobs.some(job => job.id === newJob.id)) return prevJobs;
           return [...prevJobs, {
             id: newJob.id,
-            fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() : 'unknown'),
+            fileType: newJob.fileType || (newJob.fileName ? newJob.fileName.split('.').pop() || 'unknown' : 'unknown'),
             printType: newJob.printType,
             printSide: newJob.printSide,
             copies: newJob.copies,
@@ -134,7 +137,7 @@ const ShopDashboard = () => {
   useEffect(() => {
     const fetchShopDetails = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/shop/${getShopId()}`, {
+        const response = await fetch(`${API_ENDPOINTS.SHOP_DETAILS}/${getShopId()}`, {
           headers: {
             'Authorization': `Bearer ${getToken()}`,
           },
@@ -156,7 +159,7 @@ const ShopDashboard = () => {
   useEffect(() => {
     const fetchPrintJobs = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/printjobs/prints/${getShopId()}`, {
+        const response = await fetch(`${API_ENDPOINTS.PRINT_JOBS}/prints/${getShopId()}`, {
           headers: {
             'Authorization': `Bearer ${getToken()}`,
           },
@@ -191,13 +194,13 @@ const ShopDashboard = () => {
 
   const handleMarkAsCompleted = async (jobId: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/printjobs/${jobId}`, {
+      const response = await fetch(`${API_ENDPOINTS.PRINT_JOBS}/${jobId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ status: 'completed' }),
+        body: JSON.stringify({ status: STATIC_VARIABLES.STATUS_TYPES.COMPLETED }),
       });
 
       if (!response.ok) {
@@ -233,7 +236,7 @@ const ShopDashboard = () => {
 
   const handleDeleteJob = async (jobId: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/printjobs/${jobId}`, {
+      const response = await fetch(`${API_ENDPOINTS.PRINT_JOBS}/${jobId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${getToken()}`,
@@ -244,7 +247,6 @@ const ShopDashboard = () => {
         throw new Error('Failed to delete print job');
       }
 
-      // Remove the job from the list since it’s marked "deleted" in the backend
       setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
       toast.success('Print job file deleted successfully');
     } catch (error) {
@@ -269,7 +271,7 @@ const ShopDashboard = () => {
       const hours = Math.floor(diffInMinutes / 60);
       return `${hours} hour${hours > 1 ? 's' : ''} ago`;
     } else {
-      return format(date, 'MMM d, h:mm a');
+      return format(date, STATIC_VARIABLES.DATE_FORMAT);
     }
   };
 
@@ -279,21 +281,21 @@ const ShopDashboard = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case STATIC_VARIABLES.STATUS_TYPES.PENDING:
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
             <Clock className="h-3 w-3 mr-1" />
             Pending
           </span>
         );
-      case 'completed':
+      case STATIC_VARIABLES.STATUS_TYPES.COMPLETED:
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
             <Check className="h-3 w-3 mr-1" />
             Completed
           </span>
         );
-      case 'expired':
+      case STATIC_VARIABLES.STATUS_TYPES.EXPIRED:
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
             <AlertCircle className="h-3 w-3 mr-1" />
@@ -311,7 +313,7 @@ const ShopDashboard = () => {
       return;
     }
     try {
-      const response = await fetch(`http://localhost:5000/${filePath}`, {
+      const response = await fetch(`${API_ENDPOINTS.FILE_DOWNLOAD}/${filePath}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getToken()}`,
@@ -387,7 +389,7 @@ const ShopDashboard = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Pending Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
-                    {printJobs.filter(job => job.status === 'pending').length}
+                    {printJobs.filter(job => job.status === STATIC_VARIABLES.STATUS_TYPES.PENDING).length}
                   </h3>
                 </div>
               </div>
@@ -400,7 +402,7 @@ const ShopDashboard = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Completed Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
-                    {printJobs.filter(job => job.status === 'completed').length}
+                    {printJobs.filter(job => job.status === STATIC_VARIABLES.STATUS_TYPES.COMPLETED).length}
                   </h3>
                 </div>
               </div>
@@ -413,7 +415,7 @@ const ShopDashboard = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Expired Jobs (Today)</p>
                   <h3 className="text-xl font-bold text-gray-900">
-                    {printJobs.filter(job => job.status === 'expired').length}
+                    {printJobs.filter(job => job.status === STATIC_VARIABLES.STATUS_TYPES.EXPIRED).length}
                   </h3>
                 </div>
               </div>
@@ -473,9 +475,9 @@ const ShopDashboard = () => {
                   <p className="mt-2 text-sm text-gray-500">
                     {searchQuery
                       ? "Try searching with a different token number"
-                      : activeTab === 'pending'
+                      : activeTab === STATIC_VARIABLES.STATUS_TYPES.PENDING
                         ? "You don't have any pending print jobs today."
-                        : activeTab === 'completed'
+                        : activeTab === STATIC_VARIABLES.STATUS_TYPES.COMPLETED
                           ? "You haven't completed any print jobs today."
                           : "You don't have any expired print jobs today."}
                   </p>
@@ -524,7 +526,7 @@ const ShopDashboard = () => {
                               <div className="text-xs text-gray-500">{getUploadTimeDisplay(job.uploadTime)}</div>
                             </div>
                           </div>
-                          {job.status === 'pending' && (
+                          {job.status === STATIC_VARIABLES.STATUS_TYPES.PENDING && (
                             <div className="mt-4 flex justify-end space-x-3">
                               <button
                                 onClick={() => handleMarkAsCompleted(job.id)}

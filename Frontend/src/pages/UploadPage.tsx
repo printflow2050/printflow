@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Upload, FileText, Check, Printer, ArrowLeft, Clock } from 'lucide-react';
+import { Upload, FileText, Check, Printer, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { io, Socket } from 'socket.io-client';
-import { CSSTransition } from 'react-transition-group'; // For animations
-import './styles/UploadPage.css'
+import { CSSTransition } from 'react-transition-group';
+import './styles/UploadPage.css';
+import { API_ENDPOINTS, STATIC_VARIABLES } from '../config';
 
 type PrintType = 'bw' | 'color';
 type PrintSide = 'single' | 'double';
@@ -16,18 +17,20 @@ const UploadPage = () => {
   const [shopName, setShopName] = useState('');
   const [bwCostPerPage, setBwCostPerPage] = useState(0);
   const [colorCostPerPage, setColorCostPerPage] = useState(0);
-  
+
   const [file, setFile] = useState<File | null>(null);
   const [printType, setPrintType] = useState<PrintType>('bw');
   const [printSide, setPrintSide] = useState<PrintSide>('single');
-  const [copies, setCopies] = useState(1);
+  const [copies, setCopies] = useState<number>(STATIC_VARIABLES.MIN_COPIES); // Explicitly typed as number
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const [token, setToken] = useState<string>('');
-  const [jobStatus, setJobStatus] = useState<'pending' | 'completed' | 'expired'>('pending');
-  const [isTransitioning, setIsTransitioning] = useState(false); // New state for animation
+  const [jobStatus, setJobStatus] = useState<'pending' | 'completed' | 'expired'>(
+    STATIC_VARIABLES.STATUS_TYPES.PENDING
+  );
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const nodeRef = useRef(null); // For CSSTransition
+  const nodeRef = useRef(null);
 
   // Fetch shop details
   useEffect(() => {
@@ -35,7 +38,7 @@ const UploadPage = () => {
       if (shopId) {
         try {
           console.log(shopId);
-          const response = await fetch(`http://localhost:5000/api/shop/${shopId}`);
+          const response = await fetch(`${API_ENDPOINTS.SHOP_DETAILS}/${shopId}`);
           if (!response.ok) {
             throw new Error('Failed to fetch shop details');
           }
@@ -58,7 +61,7 @@ const UploadPage = () => {
       const storedToken = localStorage.getItem(`uploadToken_${shopId}`);
       if (storedToken && shopId) {
         try {
-          const response = await fetch(`http://localhost:5000/api/printjobs/status/${storedToken}`);
+          const response = await fetch(`${API_ENDPOINTS.PRINT_JOB_STATUS}/${storedToken}`);
           if (!response.ok) {
             throw new Error('Failed to fetch job status');
           }
@@ -71,17 +74,17 @@ const UploadPage = () => {
           setPrintSide(job.print_side);
           setCopies(job.copies);
 
-          if (job.status === 'completed') {
+          if (job.status === STATIC_VARIABLES.STATUS_TYPES.COMPLETED) {
             setIsTransitioning(true);
             setTimeout(() => {
               localStorage.removeItem(`uploadToken_${shopId}`);
               setUploadComplete(false);
               setToken('');
-              setJobStatus('pending');
+              setJobStatus(STATIC_VARIABLES.STATUS_TYPES.PENDING);
               setFile(null);
               setIsTransitioning(false);
               toast.success('Your previous print job is completed!');
-            }, 2000); // 2-second delay
+            }, STATIC_VARIABLES.ANIMATION_DELAY_MS);
           }
         } catch (error) {
           console.error('Error fetching job status:', error);
@@ -95,8 +98,8 @@ const UploadPage = () => {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
-      transports: ['websocket'],
+    const socket = io(STATIC_VARIABLES.SOCKET_URL, {
+      transports: [...STATIC_VARIABLES.SOCKET_TRANSPORTS],
     });
     socketRef.current = socket;
 
@@ -108,17 +111,17 @@ const UploadPage = () => {
       console.log('Received jobStatusUpdate:', updatedJob);
       if (updatedJob.token === token) {
         setJobStatus(updatedJob.status);
-        if (updatedJob.status === 'completed') {
+        if (updatedJob.status === STATIC_VARIABLES.STATUS_TYPES.COMPLETED) {
           setIsTransitioning(true);
           setTimeout(() => {
             localStorage.removeItem(`uploadToken_${shopId}`);
             setUploadComplete(false);
             setToken('');
-            setJobStatus('pending');
+            setJobStatus(STATIC_VARIABLES.STATUS_TYPES.PENDING);
             setFile(null);
             setIsTransitioning(false);
             toast.success('Your print job is now completed!');
-          }, 2000); // 2-second delay before resetting
+          }, STATIC_VARIABLES.ANIMATION_DELAY_MS);
         }
       }
     });
@@ -141,28 +144,20 @@ const UploadPage = () => {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'image/jpeg': ['.jpg', '.jpeg'],
-      'image/png': ['.png']
-    },
+    accept: STATIC_VARIABLES.ACCEPTED_FILE_TYPES,
     maxFiles: 1,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!file) {
       toast.error('Please select a file to upload');
       return;
     }
-    
+
     setIsUploading(true);
-    
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('print_type', printType);
@@ -170,7 +165,7 @@ const UploadPage = () => {
     formData.append('copies', copies.toString());
 
     try {
-      const response = await fetch(`http://localhost:5000/api/upload/${shopId}`, {
+      const response = await fetch(`${API_ENDPOINTS.UPLOAD_FILE}/${shopId}`, {
         method: 'POST',
         body: formData,
       });
@@ -184,7 +179,7 @@ const UploadPage = () => {
       setToken(newToken);
       localStorage.setItem(`uploadToken_${shopId}`, newToken);
       setUploadComplete(true);
-      setJobStatus('pending');
+      setJobStatus(STATIC_VARIABLES.STATUS_TYPES.PENDING);
       toast.success('File uploaded successfully!');
     } catch (error) {
       toast.error('Upload failed. Please try again.');
@@ -198,8 +193,19 @@ const UploadPage = () => {
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
         <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
           <div className="text-red-500 mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-12 w-12 mx-auto"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
             </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Invalid QR Code</h2>
@@ -220,8 +226,8 @@ const UploadPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
       <CSSTransition
-        in={uploadComplete && !isTransitioning} // Show success screen when not transitioning
-        timeout={500} // Animation duration
+        in={uploadComplete && !isTransitioning}
+        timeout={STATIC_VARIABLES.FADE_ANIMATION_TIMEOUT}
         classNames="fade"
         unmountOnExit
         nodeRef={nodeRef}
@@ -236,7 +242,7 @@ const UploadPage = () => {
               Your file has been uploaded successfully to{' '}
               <span className="font-medium text-indigo-600">{shopName}</span>
             </p>
-            
+
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl mb-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">Your Token Number</h3>
               <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-700 text-center mb-2">
@@ -246,7 +252,7 @@ const UploadPage = () => {
                 Show this token to the shop owner to collect your prints
               </p>
             </div>
-            
+
             <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">File Name:</span>
@@ -272,21 +278,25 @@ const UploadPage = () => {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">Status:</span>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
-                  jobStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                }`}>
+                <span
+                  className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                    jobStatus === STATIC_VARIABLES.STATUS_TYPES.PENDING
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-green-100 text-green-800'
+                  }`}
+                >
                   <Clock className="h-3 w-3 mr-1" />
-                  {jobStatus === 'pending' ? 'Pending' : 'Completed'}
+                  {jobStatus === STATIC_VARIABLES.STATUS_TYPES.PENDING ? 'Pending' : 'Completed'}
                 </span>
               </div>
             </div>
-            
+
             <button
               onClick={() => {
                 setFile(null);
                 setUploadComplete(false);
                 setToken('');
-                setJobStatus('pending');
+                setJobStatus(STATIC_VARIABLES.STATUS_TYPES.PENDING);
                 localStorage.removeItem(`uploadToken_${shopId}`);
               }}
               className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
@@ -297,7 +307,6 @@ const UploadPage = () => {
         </div>
       </CSSTransition>
 
-      {/* Upload Form */}
       {!uploadComplete && (
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="flex justify-center items-center">
@@ -321,11 +330,9 @@ const UploadPage = () => {
             <div className="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload Document
-                  </label>
-                  <div 
-                    {...getRootProps()} 
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Document</label>
+                  <div
+                    {...getRootProps()}
                     className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${
                       isDragActive ? 'border-indigo-600 bg-indigo-50' : 'border-gray-300 hover:border-indigo-600 hover:bg-gray-50'
                     }`}
@@ -346,7 +353,7 @@ const UploadPage = () => {
                           Drag & drop a file here, or click to select
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Supports PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                          Supports PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max {STATIC_VARIABLES.MAX_FILE_SIZE_MB}MB)
                         </p>
                       </div>
                     )}
@@ -355,13 +362,11 @@ const UploadPage = () => {
 
                 <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Print Type
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Print Type</label>
                     <div className="grid grid-cols-2 gap-4">
                       {[
                         { value: 'bw', label: 'Black & White' },
-                        { value: 'color', label: 'Color' }
+                        { value: 'color', label: 'Color' },
                       ].map((option) => (
                         <button
                           key={option.value}
@@ -380,13 +385,11 @@ const UploadPage = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Print Side
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Print Side</label>
                     <div className="grid grid-cols-2 gap-4">
                       {[
                         { value: 'single', label: 'Single-sided' },
-                        { value: 'double', label: 'Double-sided' }
+                        { value: 'double', label: 'Double-sided' },
                       ].map((option) => (
                         <button
                           key={option.value}
@@ -411,7 +414,7 @@ const UploadPage = () => {
                     <div className="flex items-start space-x-3">
                       <button
                         type="button"
-                        onClick={() => copies > 1 && setCopies(copies - 1)}
+                        onClick={() => copies > STATIC_VARIABLES.MIN_COPIES && setCopies(copies - 1)}
                         className="p-2 rounded-lg border border-gray-200 hover:border-indigo-600 transition-colors duration-200 w-10 h-10 flex items-center justify-center"
                       >
                         -
@@ -419,15 +422,15 @@ const UploadPage = () => {
                       <input
                         type="number"
                         id="copies"
-                        min="1"
-                        max="100"
+                        min={STATIC_VARIABLES.MIN_COPIES}
+                        max={STATIC_VARIABLES.MAX_COPIES}
                         value={copies}
-                        onChange={(e) => setCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => setCopies(parseInt(e.target.value) || STATIC_VARIABLES.MIN_COPIES)}
                         className="block w-20 text-center px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       />
                       <button
                         type="button"
-                        onClick={() => copies < 100 && setCopies(copies + 1)}
+                        onClick={() => copies < STATIC_VARIABLES.MAX_COPIES && setCopies(copies + 1)}
                         className="p-2 rounded-lg border border-gray-200 hover:border-indigo-600 transition-colors duration-200 w-10 h-10 flex items-center justify-center"
                       >
                         +
@@ -443,9 +446,18 @@ const UploadPage = () => {
                 >
                   {isUploading ? (
                     <div className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
                       </svg>
                       Uploading...
                     </div>
@@ -463,4 +475,3 @@ const UploadPage = () => {
 };
 
 export default UploadPage;
-
